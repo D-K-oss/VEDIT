@@ -1,0 +1,113 @@
+# ============================================================
+#  VEDIT release workflow
+#
+#  Trigger: push a tag like v0.2.0
+#  Result:  GitHub Actions artifacts containing
+#           - VEDIT-Setup-<ver>.exe   (Windows installer with bundled ffmpeg)
+#           - VEDIT-Portable-<ver>.zip (portable exe + ffmpeg)
+#           - VEDIT-linux-<ver>.tar.gz (linux binary)
+#
+#  No local tooling required — the .exe and installer are built in the cloud.
+# ============================================================
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build vedit.exe
+        run: cargo build --release -p vedit-gui
+
+      - name: Download ffmpeg (Windows build)
+        shell: pwsh
+        run: |
+          $Zip = "$env:RUNNER_TEMP\ffmpeg.zip"
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $Zip
+          Expand-Archive -Path $Zip -DestinationPath "$env:RUNNER_TEMP\ffmpeg" -Force
+          $Bin = Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+          $Src = Split-Path -Parent $Bin.FullName
+          New-Item -ItemType Directory -Force -Path "dist\VEDIT\ffmpeg" | Out-Null
+          Copy-Item (Join-Path $Src "ffmpeg.exe")  "dist\VEDIT\ffmpeg\"
+          Copy-Item (Join-Path $Src "ffprobe.exe") "dist\VEDIT\ffmpeg\"
+
+      - name: Assemble portable dist
+        shell: pwsh
+        run: |
+          Copy-Item "target\release\vedit.exe" "dist\VEDIT\vedit.exe"
+          Copy-Item "README.md" "dist\VEDIT\" -ErrorAction SilentlyContinue
+          Copy-Item "LICENSE"   "dist\VEDIT\" -ErrorAction SilentlyContinue
+
+      - name: Compute version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}" -replace "^v", ""
+          if (-not $v) { $v = "0.2.0" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.ver.outputs.version }} installer\vedit.iss
+
+      - name: Zip portable build
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\VEDIT" -DestinationPath "VEDIT-Portable-${{ steps.ver.outputs.version }}.zip"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VEDIT-windows-${{ steps.ver.outputs.version }}
+          path: |
+            installer/Output/*.exe
+            VEDIT-Portable-*.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev
+
+      - name: Build vedit (linux)
+        run: cargo build --release -p vedit-gui
+
+      - name: Package
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          [ -z "$v" ] && v="0.2.0"
+          mkdir -p "VEDIT-linux-$v"
+          cp target/release/vedit "VEDIT-linux-$v/"
+          cp README.md LICENSE "VEDIT-linux-$v/" 2>/dev/null || true
+          tar czf "VEDIT-linux-$v.tar.gz" "VEDIT-linux-$v"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VEDIT-linux
+          path: VEDIT-linux-*.tar.gz
