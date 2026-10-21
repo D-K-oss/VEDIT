@@ -1,0 +1,13 @@
+# VEDIT build artifacts
+/target/
+**/*.rs.bk
+dist/
+installer/Output/
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Local media caches
+.vedit-cache/
