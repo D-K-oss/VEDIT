@@ -1,0 +1,15 @@
+[package]
+name = "vedit-core"
+description = "VEDIT media engine: project model, ffmpeg/ffprobe pipeline, export renderer, preview decoder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+image = { workspace = true }
+# Embedded-font text rasterization for title clips (preview + export).
+ab_glyph = "0.2"

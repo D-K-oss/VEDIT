@@ -1,0 +1,29 @@
+[package]
+name = "vedit-gui"
+description = "VEDIT — a minimalist video editor (egui GUI)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vedit"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+vedit-core = { workspace = true }
+eframe = { workspace = true }
+rfd = { workspace = true }
+open = { workspace = true }
+image = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# Native audio playback for preview (ALSA/PulseAudio deps make Linux CI builds
+# awkward, so preview audio is enabled on Windows & macOS builds).
+# `symphonia-all` enables every symphonia decoder: AAC + the MP4/MOV container
+# (.mov/.mp4/.m4a), MP3, FLAC, Vorbis, WAV — without `symphonia-aac` +
+# `symphonia-isomp4`, audio in .mov/.mp4 files silently fails to decode.
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+rodio = { version = "0.19", default-features = false, features = ["symphonia-all"] }
